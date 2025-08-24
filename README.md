@@ -4,12 +4,12 @@
 BYO keys • Zero telemetry • One-command run • Compare outputs side-by-side
 
 <p align="center">
-  <img src="icons/groq.svg" height="40"/>
-  <img src="icons/mistral.svg" height="40"/>
-  <img src="icons/openai.svg" height="40"/>
-  <img src="icons/google.svg" height="40"/>
-  <img src="icons/lmstudio.svg" height="40"/>
-  <img src="icons/anthropic.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/groq.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/mistral.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/openai.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/google.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/lmstudio.svg" height="40"/>
+  <img src="apps/web/src/assets/logos/anthropic.svg" height="40"/>
 </p>
 
 ---
