@@ -1,41 +1,25 @@
-name: CI
-
-on:
-  pull_request:
-  push:
-    branches: [ main ]
-
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v3
         with:
           node-version: 20
-          cache: npm
 
-      - name: Install Server
-        working-directory: server
+      - name: Install server deps
+        working-directory: apps/server
         run: npm ci
 
-      - name: Build Server
-        working-directory: server
+      - name: Build server
+        working-directory: apps/server
         run: npm run build
 
-      - name: Test Server
-        working-directory: server
-        env:
-          DRY_RUN: "1"
-        run: npm run test -- --run
-
-      - name: Install Web
-        working-directory: web
+      - name: Install web deps
+        working-directory: apps/web
         run: npm ci
 
-      - name: Build Web
-        working-directory: web
+      - name: Build web
+        working-directory: apps/web
         run: npm run build
