@@ -10,16 +10,15 @@ RUN npm run build
 FROM node:22-alpine AS serverdeps
 WORKDIR /build/server
 COPY apps/server/package.json apps/server/package-lock.json ./
-# Dev deps needed for tsc
 RUN npm ci --no-audit --no-fund
 
 # --- server build (uses dev deps) ---
 FROM serverdeps AS serverbuild
 WORKDIR /build/server
 COPY apps/server .
-RUN npm run build   # must produce /build/server/dist
+RUN npm run build   # produces /build/server/dist
 
-# --- server prod deps only (runtime shrink) ---
+# --- server prod deps (runtime shrink) ---
 FROM node:22-alpine AS serverprod
 WORKDIR /build/server
 COPY apps/server/package.json apps/server/package-lock.json ./
@@ -27,24 +26,30 @@ RUN npm ci --omit=dev --no-audit --no-fund
 
 # --- runtime (Node 22 + nginx) ---
 FROM node:22-alpine AS runtime
-RUN apk add --no-cache nginx wget
+ENV NODE_ENV=production
+RUN apk add --no-cache nginx wget \
+ && addgroup -S llm && adduser -S llm -G llm
 
-# nginx master (wraps http{} and includes conf.d)
+# master wraps http{} and includes conf.d
 COPY proxy/nginx/nginx.master.min.conf /etc/nginx/nginx.conf
-# your server/site file with map/upstream/listen 80
+# your server/site (listen 8080; upstream 127.0.0.1:5000)
 COPY proxy/nginx/nginx.conf            /etc/nginx/conf.d/default.conf
 
 # static frontend
 COPY --from=webbuild    /build/web/dist/                    /usr/share/nginx/html/
 
-# API: built JS + prod node_modules
+# API build + prod node_modules
 COPY --from=serverbuild /build/server/dist/                 /opt/llm/apps/server/dist/
 COPY --from=serverprod  /build/server/node_modules/         /opt/llm/apps/server/node_modules/
 COPY --from=serverprod  /build/server/package.json          /opt/llm/apps/server/package.json
 
-# sanity: fail build if nginx conf is bad
+# fail fast if nginx conf breaks
 RUN nginx -t
 
-EXPOSE 80
-# start API then nginx
+USER llm
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:8080/nginx-healthz >/dev/null || exit 1
+
+# start API then nginx (site listens on 8080)
 CMD ["/bin/sh","-lc","node /opt/llm/apps/server/dist/index.js & exec nginx -g 'daemon off;'"]
