@@ -18,11 +18,16 @@ BYO keys • Zero telemetry • One-command run • Compare outputs side-by-side
 
 Run the container (multi-arch image: `linux/amd64` and `arm64`):
 
-```bash
-docker run -it --rm \
+```docker run -d --name llm-workbench --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
-  -v "$HOME/.config/llm-workbench:/home/nonroot/.config/llm-workbench:rw" \
-  ghcr.io/<your-gh-username>/llm-workbench:latest
+  -e NODE_ENV=production \
+  -e PORT=5000 \
+  -v "$HOME/.config/llm-workbench:/home/llm/.config/llm-workbench:rw" \
+  visionforge4d/eddy-llm-workbench:latest
+
+# Health (Nginx + API)
+curl -fsS http://127.0.0.1:8080/nginx-healthz && echo "OK"
+curl -fsS http://127.0.0.1:8080/health && echo
 ```
 
 Then open: [http://localhost:8080](http://localhost:8080)
