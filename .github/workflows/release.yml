@@ -3,6 +3,19 @@ on:
   push:
     tags:
       - "v*.*.*"     # e.g., v0.1.5
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+  workflow_dispatch: {}  # manual run button
+=======
+  workflow_dispatch: {}         # manual run button
+>>>>>>> 00d1551 (ci: release (visionforge4d, DH+GHCR, multi-arch))
+name: release
+on:
+  push:
+    tags:
+      - "v*.*.*"      # e.g., v0.1.6
+>>>>>>> 60272ac (ci: release (visionforge4d, DH+GHCR, multi-arch))
   workflow_dispatch: {}         # manual run button
 
 jobs:
@@ -10,7 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+<<<<<<< HEAD
       packages: write   # needed for GHCR
+=======
+      packages: write   # GHCR
+>>>>>>> 60272ac (ci: release (visionforge4d, DH+GHCR, multi-arch))
     env:
       IMAGE_NAME_DH: visionforge4d/eddy-llm-workbench
       IMAGE_NAME_GHCR: ghcr.io/visionforge4d/eddy-llm-workbench
@@ -26,6 +43,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+<<<<<<< HEAD
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -37,6 +55,39 @@ jobs:
         id: ver
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
+=======
+      - name: Verify Docker Hub login
+        run: |
+          set -e
+          docker info | grep -i '^ Username:' | sed 's/^ */[info] /' || (echo "[err] Not logged in to Docker Hub" && exit 1)
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version (strip leading v; default for manual runs)
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "VERSION=edge-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "[info] VERSION=$(cat $GITHUB_OUTPUT | sed 's/.*=//')"
+
+      - name: Echo target tags
+        run: |
+          echo "[info] Will push:"
+          echo " - ${{ env.IMAGE_NAME_DH }}:${{ steps.ver.outputs.VERSION }}"
+          echo " - ${{ env.IMAGE_NAME_DH }}:latest"
+          echo " - ${{ env.IMAGE_NAME_GHCR }}:${{ steps.ver.outputs.VERSION }}"
+          echo " - ${{ env.IMAGE_NAME_GHCR }}:latest"
+
+>>>>>>> 60272ac (ci: release (visionforge4d, DH+GHCR, multi-arch))
       - name: Build & push (multi-arch to DH + GHCR)
         uses: docker/build-push-action@v6
         with:
@@ -48,7 +99,11 @@ jobs:
             ${{ env.IMAGE_NAME_DH }}:latest
             ${{ env.IMAGE_NAME_GHCR }}:${{ steps.ver.outputs.VERSION }}
             ${{ env.IMAGE_NAME_GHCR }}:latest
+<<<<<<< HEAD
           # Enable cache after first successful push
+=======
+          # enable cache after first green run
+>>>>>>> 60272ac (ci: release (visionforge4d, DH+GHCR, multi-arch))
           # cache-from: |
           #   type=registry,ref=${{ env.IMAGE_NAME_DH }}:buildcache
           #   type=registry,ref=${{ env.IMAGE_NAME_GHCR }}:buildcache
