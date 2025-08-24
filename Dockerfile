@@ -12,44 +12,59 @@ WORKDIR /build/server
 COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-# --- server build (uses dev deps) ---
+# --- server build ---
 FROM serverdeps AS serverbuild
 WORKDIR /build/server
 COPY apps/server .
-RUN npm run build   # produces /build/server/dist
+RUN npm run build
 
-# --- server prod deps (runtime shrink) ---
+# --- server prod deps ---
 FROM node:22-alpine AS serverprod
 WORKDIR /build/server
 COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-# --- runtime (Node 22 + nginx) ---
+# --- runtime ---
 FROM node:22-alpine AS runtime
-ENV NODE_ENV=production
-RUN apk add --no-cache nginx wget \
+ENV NODE_ENV=production PORT=5000
+RUN apk add --no-cache nginx wget tini \
  && addgroup -S llm && adduser -S llm -G llm
+STOPSIGNAL SIGTERM
+LABEL org.opencontainers.image.title="eddy-llm-workbench" \
+      org.opencontainers.image.description="Self-hosted web + API workbench for switching between LLM providers." \
+      org.opencontainers.image.source="https://github.com/visionforge4d/eddy-llm-workbench" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
-# master wraps http{} and includes conf.d
-COPY proxy/nginx/nginx.master.min.conf /etc/nginx/nginx.conf
-# your server/site (listen 8080; upstream 127.0.0.1:5000)
-COPY proxy/nginx/nginx.conf            /etc/nginx/conf.d/default.conf
+# Unprivileged master + site (master has no 'user' and no 'pid'; temps -> /tmp; logs -> stdout/stderr)
+COPY proxy/nginx/nginx.master.unpriv.nopid.conf /etc/nginx/nginx.conf
+COPY proxy/nginx/nginx.conf                    /etc/nginx/conf.d/default.conf
 
-# static frontend
-COPY --from=webbuild    /build/web/dist/                    /usr/share/nginx/html/
-
+# Static frontend
+COPY --from=webbuild    /build/web/dist/            /usr/share/nginx/html/
 # API build + prod node_modules
-COPY --from=serverbuild /build/server/dist/                 /opt/llm/apps/server/dist/
-COPY --from=serverprod  /build/server/node_modules/         /opt/llm/apps/server/node_modules/
-COPY --from=serverprod  /build/server/package.json          /opt/llm/apps/server/package.json
+COPY --from=serverbuild /build/server/dist/         /opt/llm/apps/server/dist/
+COPY --from=serverprod  /build/server/node_modules/ /opt/llm/apps/server/node_modules/
+COPY --from=serverprod  /build/server/package.json  /opt/llm/apps/server/package.json
 
-# fail fast if nginx conf breaks
+# Sanity check before nginx -t (ensures master has events{} and includes sites)
+RUN grep -q '^[[:space:]]*events[[:space:]]*{' /etc/nginx/nginx.conf \
+ && grep -q 'include /etc/nginx/conf.d/\*\.conf' /etc/nginx/nginx.conf
+
+# Fail fast if nginx config broken
 RUN nginx -t
 
+# Non-root runtime; container listens on 8080
 USER llm
 EXPOSE 8080
+
+# Healthcheck hits Nginx
 HEALTHCHECK --interval=30s --timeout=3s --retries=5 \
   CMD wget -qO- http://127.0.0.1:8080/nginx-healthz >/dev/null || exit 1
 
-# start API then nginx (site listens on 8080)
-CMD ["/bin/sh","-lc","node /opt/llm/apps/server/dist/index.js & exec nginx -g 'daemon off;'"]
+# Proper init; start API, wait until healthy, then exec Nginx (no PID file writes)
+ENTRYPOINT ["/sbin/tini","--"]
+CMD ["/bin/sh","-lc","\
+  node /opt/llm/apps/server/dist/index.js & \
+  for i in $(seq 1 100); do wget -qO- http://127.0.0.1:${PORT}/health >/dev/null 2>&1 && break; sleep 0.2; done; \
+  exec nginx -g 'pid /dev/null; error_log /dev/stderr notice; daemon off;' \
+"]
