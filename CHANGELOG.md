@@ -1,3 +1,9 @@
+## v0.1.0
+- Single-container image (nginx+node)
+- /api proxy wired
+- Health checks
+- Env/secret hygiene
+
 # Changelog
 
 All notable changes to **"Eddy"-LLM Workbench** will be documented in this file.
