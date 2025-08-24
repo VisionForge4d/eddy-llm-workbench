@@ -9,7 +9,7 @@ Only the latest tagged release of **"Eddy"-LLM Workbench** is actively supported
 If you discover a security vulnerability, please **do not open a public issue.**
 Instead, report it responsibly by emailing:
 
-**[VisionForge4d@gmail.com]**
+**[VisionForge4d@protonmail.com]**
 
 We will acknowledge receipt within 48 hours and aim to provide a fix within a reasonable timeframe depending on severity.
 
