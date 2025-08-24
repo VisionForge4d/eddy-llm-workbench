@@ -6,41 +6,45 @@ RUN npm ci --no-audit --no-fund
 COPY apps/web .
 RUN npm run build
 
-# --- server build (runtime deps only) ---
-FROM node:22-alpine AS serverbuild
+# --- server deps (dev) ---
+FROM node:22-alpine AS serverdeps
 WORKDIR /build/server
 COPY apps/server/package.json apps/server/package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund   # installs express & friends
+# Dev deps needed for tsc
+RUN npm ci --no-audit --no-fund
+
+# --- server build (uses dev deps) ---
+FROM serverdeps AS serverbuild
+WORKDIR /build/server
 COPY apps/server .
-RUN npm run build
+RUN npm run build   # must produce /build/server/dist
 
-# --- runtime (Node 22 + Nginx) ---
+# --- server prod deps only (runtime shrink) ---
+FROM node:22-alpine AS serverprod
+WORKDIR /build/server
+COPY apps/server/package.json apps/server/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+# --- runtime (Node 22 + nginx) ---
 FROM node:22-alpine AS runtime
-RUN apk add --no-cache nginx wget \
- && addgroup -S llm && adduser -S llm -G llm
-ENV NODE_ENV=production
+RUN apk add --no-cache nginx wget
 
-# Nginx config: master + site (your existing server file)
+# nginx master (wraps http{} and includes conf.d)
 COPY proxy/nginx/nginx.master.min.conf /etc/nginx/nginx.conf
+# your server/site file with map/upstream/listen 80
 COPY proxy/nginx/nginx.conf            /etc/nginx/conf.d/default.conf
 
-# Frontend
-COPY --from=webbuild    /build/web/dist/         /usr/share/nginx/html/
+# static frontend
+COPY --from=webbuild    /build/web/dist/                    /usr/share/nginx/html/
 
-# API (dist + node_modules)
-COPY --from=serverbuild /build/server/dist/      /opt/llm/apps/server/dist/
-COPY --from=serverbuild /build/server/node_modules/ /opt/llm/apps/server/node_modules/
-COPY --from=serverbuild /build/server/package.json  /opt/llm/apps/server/package.json
+# API: built JS + prod node_modules
+COPY --from=serverbuild /build/server/dist/                 /opt/llm/apps/server/dist/
+COPY --from=serverprod  /build/server/node_modules/         /opt/llm/apps/server/node_modules/
+COPY --from=serverprod  /build/server/package.json          /opt/llm/apps/server/package.json
 
-# Permissions
-RUN chown -R llm:llm /usr/share/nginx/html /opt/llm
-USER llm
+# sanity: fail build if nginx conf is bad
+RUN nginx -t
 
 EXPOSE 80
-# Sanity check at build time (runs as root is fine if you prefer; optional here)
-# USER root
-# RUN nginx -t && chown -R llm:llm /etc/nginx
-# USER llm
-
-# Start API then Nginx (master handles include of conf.d)
+# start API then nginx
 CMD ["/bin/sh","-lc","node /opt/llm/apps/server/dist/index.js & exec nginx -g 'daemon off;'"]
