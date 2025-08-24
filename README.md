@@ -117,22 +117,11 @@ Contributions welcome!
 
 ---
 
-## Demo
-
-![demo.gif](demo/demo.gif)
-*A short demo of switching between providers and exporting a session.*
-
----
 
 ## License
 
 MIT © \[VisionForge4d]
 
 ---
-
-## Launch Links
-
-* Show HN: *"Eddy" LLM Workbench — local-first switchboard for Groq, Mistral, OpenAI, Google, LM Studio, Anthropic*
-* Reddit: r/selfhosted • r/LocalLLaMA • r/MachineLearning
 
 Feedback, issues, and PRs very welcome.
