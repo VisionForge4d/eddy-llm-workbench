@@ -1,0 +1,32 @@
+name: switch
+
+services:
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    env_file: ../server/.env
+    ports:
+      - "5002:5000"   # host 5002 -> container 5000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [switch-net]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        - VITE_SERVER_URL=http://localhost:5002
+    environment:
+      - VITE_SERVER_URL=http://localhost:5002
+    ports:
+      - "8080:80"
+    networks: [switch-net]
+    depends_on: [server]
+    restart: unless-stopped
+
+networks:
+  switch-net:
+    driver: bridge

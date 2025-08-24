@@ -1,0 +1,79 @@
+# ---------- build stage (web + server) ----------
+FROM node:20-slim AS build
+WORKDIR /opt/llm
+
+# Copy package manifests first (cache-friendly)
+COPY apps/server/package*.json apps/server/
+COPY apps/web/package*.json apps/web/
+
+# Install deps
+RUN npm ci --prefix apps/server && npm ci --prefix apps/web
+
+# Copy sources
+COPY apps/server apps/server
+COPY apps/web apps/web
+COPY proxy/nginx/nginx.conf proxy/nginx/nginx.conf
+
+# Build frontend (Vite -> /opt/llm/apps/web/dist)
+RUN npm run build --prefix apps/web
+
+# Build server (tsc -> /opt/llm/apps/server/dist)
+# apps/server/package.json should have: "build": "tsc"
+RUN npm run build --prefix apps/server
+
+# ---------- runtime stage (nginx + node) ----------
+FROM debian:12-slim
+
+# Install nginx + CA; clean apt cache
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      nginx ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Provide Node 20 runtime by copying from official node image
+COPY --from=node:20-slim /usr/local /usr/local
+
+# Base env
+ENV NODE_ENV=production \
+    XDG_CONFIG_HOME=/home/llm/.config \
+    LLMWB_BIND_HOST=127.0.0.1 \
+    LLMWB_PORT=3000
+
+# Non-root app user
+RUN useradd -m -r -s /usr/sbin/nologin llm \
+ && mkdir -p /home/llm/.config/llm-workbench \
+ && chown -R llm:llm /home/llm
+
+# Remove Debian's stock default site; avoid duplicate default_server
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default \
+    && rm -f /etc/nginx/conf.d/default.conf
+
+# Copy built assets and server runtime
+WORKDIR /opt/llm
+COPY --from=build /opt/llm/apps/web/dist /usr/share/nginx/html
+COPY --from=build /opt/llm/apps/server/dist ./apps/server/dist
+COPY --from=build /opt/llm/apps/server/package*.json ./apps/server/
+
+# Install server runtime deps only
+RUN npm ci --omit=dev --prefix ./apps/server
+
+# Our nginx vhost (server-only config)
+COPY proxy/nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Entrypoint starts Node (as llm) + nginx (foreground)
+COPY packaging/docker/web/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Static file perms for nginx
+RUN chown -R www-data:www-data /usr/share/nginx/html
+
+# Expose HTTP; add a simple healthcheck (nginx)
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -fsS http://127.0.0.1/nginx-healthz || exit 1
+
+# Use sensible stop signal for nginx
+STOPSIGNAL SIGTERM
+
+# Run
+CMD ["/entrypoint.sh"]
+

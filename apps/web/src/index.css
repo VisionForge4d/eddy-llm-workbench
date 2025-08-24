@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* Light theme baseline */
+html, body, #root { height: 100%; }
+body { background: #f3f4f6; /* gray-100 */ color: #111827; /* gray-900 */ }
+
+button { appearance: none; background: transparent; border: 0; padding: 0; }
